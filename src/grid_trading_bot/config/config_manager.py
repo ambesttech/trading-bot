@@ -172,6 +172,33 @@ class ConfigManager:
         stop_loss = self.get_stop_loss()
         return stop_loss.get("threshold", None)
 
+    def get_position_sizing(self) -> dict:
+        return self.get_risk_management().get("position_sizing") or {}
+
+    def get_max_portfolio_fraction_for_sizing(self) -> float:
+        """
+        Upper bound on portfolio value (quote terms) used for grid order sizing
+        and initial inventory targeting. 1.0 uses the full marked-to-market value.
+        """
+        ps = self.get_position_sizing()
+        raw = ps.get("max_portfolio_fraction", 1.0)
+        if raw is None:
+            return 1.0
+        return float(raw)
+
+    def get_min_quote_notional_per_grid(self) -> float | None:
+        ps = self.get_position_sizing()
+        raw = ps.get("min_quote_notional_per_grid")
+        if raw is None:
+            return None
+        return float(raw)
+
+    def get_risk_safety_settings(self) -> dict:
+        return self.get_risk_management().get("safety") or {}
+
+    def is_enforce_tp_sl_vs_grid_range(self) -> bool:
+        return bool(self.get_risk_safety_settings().get("enforce_tp_sl_vs_grid_range", False))
+
     # --- Execution Settings Accessor Methods ---
     def get_execution_settings(self) -> dict:
         return self.config.get("execution", {})

@@ -69,8 +69,8 @@ Define a price range and number of grid levels. The bot places layered buy and s
 
 ### Prerequisites
 
-- Python 3.12+
-- [uv](https://docs.astral.sh/uv/) package manager
+- Python 3.12+ (on Windows, use the **64-bit** installer; 32-bit builds lack PyPI wheels for some `ccxt` dependencies)
+- [uv](https://docs.astral.sh/uv/) package manager — this repo sets `python-preference = "system"` so `uv sync` prefers your installed Python instead of a uv-managed interpreter that might be 32-bit
 
 ### Setup
 

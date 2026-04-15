@@ -145,3 +145,39 @@ class TestConfigValidator:
         with pytest.raises(ConfigValidationError) as excinfo:
             config_validator.validate(valid_config)
         assert f"grid_strategy.{ratio_field}" in excinfo.value.invalid_fields
+
+    def test_validate_tp_sl_order_when_both_enabled(self, config_validator, valid_config):
+        valid_config["risk_management"]["take_profit"]["enabled"] = True
+        valid_config["risk_management"]["stop_loss"]["enabled"] = True
+        valid_config["risk_management"]["take_profit"]["threshold"] = 3000
+        valid_config["risk_management"]["stop_loss"]["threshold"] = 3000
+        with pytest.raises(ConfigValidationError) as excinfo:
+            config_validator.validate(valid_config)
+        assert "risk_management.take_profit.threshold" in excinfo.value.invalid_fields
+        assert "risk_management.stop_loss.threshold" in excinfo.value.invalid_fields
+
+    def test_validate_enforce_tp_sl_vs_grid_range(self, config_validator, valid_config):
+        valid_config["risk_management"]["safety"] = {"enforce_tp_sl_vs_grid_range": True}
+        valid_config["risk_management"]["take_profit"]["enabled"] = True
+        valid_config["risk_management"]["take_profit"]["threshold"] = 3000  # below grid top 3100
+        valid_config["risk_management"]["stop_loss"]["enabled"] = True
+        valid_config["risk_management"]["stop_loss"]["threshold"] = 2900  # above grid bottom 2850
+        with pytest.raises(ConfigValidationError) as excinfo:
+            config_validator.validate(valid_config)
+        assert "risk_management.take_profit.threshold" in excinfo.value.invalid_fields
+        assert "risk_management.stop_loss.threshold" in excinfo.value.invalid_fields
+
+    def test_validate_min_quote_notional_per_grid_too_high(self, config_validator, valid_config):
+        valid_config["risk_management"]["position_sizing"] = {
+            "max_portfolio_fraction": 1.0,
+            "min_quote_notional_per_grid": 600,
+        }
+        with pytest.raises(ConfigValidationError) as excinfo:
+            config_validator.validate(valid_config)
+        assert "risk_management.position_sizing.min_quote_notional_per_grid" in excinfo.value.invalid_fields
+
+    def test_validate_max_portfolio_fraction_out_of_range(self, config_validator, valid_config):
+        valid_config["risk_management"]["position_sizing"] = {"max_portfolio_fraction": 1.5}
+        with pytest.raises(ConfigValidationError) as excinfo:
+            config_validator.validate(valid_config)
+        assert "risk_management.position_sizing.max_portfolio_fraction" in excinfo.value.invalid_fields

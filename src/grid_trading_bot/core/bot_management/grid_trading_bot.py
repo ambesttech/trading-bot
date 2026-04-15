@@ -58,6 +58,7 @@ class GridTradingBot:
             self.save_performance_results_path = save_performance_results_path
             self.no_plot = no_plot
             self.trading_mode: TradingMode = self.config_manager.get_trading_mode()
+            self._uses_exchange_order_tracking = self.trading_mode == TradingMode.LIVE
             base_currency: str = self.config_manager.get_base_currency()
             quote_currency: str = self.config_manager.get_quote_currency()
             trading_pair = f"{base_currency}/{quote_currency}"
@@ -229,7 +230,8 @@ class GridTradingBot:
                     recovery_result.orders_filled_while_down
                 )
 
-            self.order_status_tracker.start_tracking()
+            if self._uses_exchange_order_tracking:
+                self.order_status_tracker.start_tracking()
             if self.reconciliation_service:
                 self.reconciliation_service.start()
             await self.strategy.run(
@@ -268,7 +270,8 @@ class GridTradingBot:
         try:
             if self.reconciliation_service:
                 await self.reconciliation_service.stop()
-            await self.order_status_tracker.stop_tracking()
+            if self._uses_exchange_order_tracking:
+                await self.order_status_tracker.stop_tracking()
             await self.strategy.stop()
             if self.state_persistence_service:
                 self.state_persistence_service.cleanup()
@@ -299,7 +302,8 @@ class GridTradingBot:
         self.is_running = True
 
         try:
-            self.order_status_tracker.start_tracking()
+            if self._uses_exchange_order_tracking:
+                self.order_status_tracker.start_tracking()
             if self.reconciliation_service:
                 self.reconciliation_service.start()
             await self.strategy.restart()

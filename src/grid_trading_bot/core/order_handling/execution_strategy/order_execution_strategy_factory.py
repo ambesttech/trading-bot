@@ -5,6 +5,7 @@ from grid_trading_bot.core.services.exchange_interface import ExchangeInterface
 from .backtest_order_execution_strategy import BacktestOrderExecutionStrategy
 from .live_order_execution_strategy import LiveOrderExecutionStrategy
 from .order_execution_strategy_interface import OrderExecutionStrategyInterface
+from .paper_order_execution_strategy import PaperOrderExecutionStrategy
 
 
 class OrderExecutionStrategyFactory:
@@ -15,13 +16,15 @@ class OrderExecutionStrategyFactory:
     ) -> OrderExecutionStrategyInterface:
         trading_mode = config_manager.get_trading_mode()
 
-        if trading_mode == TradingMode.LIVE or trading_mode == TradingMode.PAPER_TRADING:
+        if trading_mode == TradingMode.LIVE:
             return LiveOrderExecutionStrategy(
                 exchange_service=exchange_service,
                 max_retries=config_manager.get_max_retries(),
                 retry_delay=config_manager.get_retry_delay(),
                 max_slippage=config_manager.get_max_slippage(),
             )
+        elif trading_mode == TradingMode.PAPER_TRADING:
+            return PaperOrderExecutionStrategy(slippage=config_manager.get_backtest_slippage())
         elif trading_mode == TradingMode.BACKTEST:
             return BacktestOrderExecutionStrategy(
                 slippage=config_manager.get_backtest_slippage(),

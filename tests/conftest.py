@@ -10,7 +10,7 @@ def valid_config():
     """Fixture providing a valid configuration for testing."""
     return {
         "exchange": {
-            "name": "binance",
+            "name": "mexc",
             "trading_fee": 0.001,
             "trading_mode": "backtest",
         },

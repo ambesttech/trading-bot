@@ -42,7 +42,7 @@ class TestConfigManager:
             ConfigManager("config.json", mock_validator)
 
     def test_get_exchange_name(self, config_manager):
-        assert config_manager.get_exchange_name() == "binance"
+        assert config_manager.get_exchange_name() == "mexc"
 
     def test_get_trading_fee(self, config_manager):
         assert config_manager.get_trading_fee() == 0.001
@@ -180,11 +180,30 @@ class TestConfigManager:
         config_manager.config["grid_strategy"]["sell_ratio"] = 0.5
         assert config_manager.get_sell_ratio() == 0.5
 
+    def test_get_max_portfolio_fraction_for_sizing_default(self, config_manager):
+        assert config_manager.get_max_portfolio_fraction_for_sizing() == 1.0
+
+    def test_get_max_portfolio_fraction_for_sizing_custom(self, config_manager):
+        config_manager.config.setdefault("risk_management", {})["position_sizing"] = {"max_portfolio_fraction": 0.25}
+        assert config_manager.get_max_portfolio_fraction_for_sizing() == 0.25
+
+    def test_get_min_quote_notional_per_grid(self, config_manager):
+        assert config_manager.get_min_quote_notional_per_grid() is None
+        config_manager.config.setdefault("risk_management", {})["position_sizing"] = {
+            "min_quote_notional_per_grid": 10.5,
+        }
+        assert config_manager.get_min_quote_notional_per_grid() == 10.5
+
+    def test_is_enforce_tp_sl_vs_grid_range(self, config_manager):
+        assert config_manager.is_enforce_tp_sl_vs_grid_range() is False
+        config_manager.config.setdefault("risk_management", {})["safety"] = {"enforce_tp_sl_vs_grid_range": True}
+        assert config_manager.is_enforce_tp_sl_vs_grid_range() is True
+
 
 class TestConfigManagerFromDict:
     def test_from_dict_creates_valid_config_manager(self, valid_config):
         cm = ConfigManager.from_dict(valid_config)
-        assert cm.get_exchange_name() == "binance"
+        assert cm.get_exchange_name() == "mexc"
         assert cm.get_trading_fee() == 0.001
         assert cm.get_base_currency() == "ETH"
         assert cm.get_quote_currency() == "USDT"

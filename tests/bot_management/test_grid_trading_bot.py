@@ -341,3 +341,19 @@ class TestGridTradingBot:
         bot.strategy.plot_results.assert_called_once()
         bot.strategy.run.assert_awaited_once()
         bot.order_status_tracker.start_tracking.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_run_does_not_start_order_tracker_in_paper_mode(self, bot):
+        bot.trading_mode = TradingMode.PAPER_TRADING
+        bot._uses_exchange_order_tracking = False
+        bot.balance_tracker.setup_balances = AsyncMock()
+        bot.order_status_tracker.start_tracking = Mock()
+        bot.strategy.initialize_strategy = Mock()
+        bot.strategy.run = AsyncMock()
+        bot.strategy.plot_results = Mock()
+        bot._generate_and_log_performance = Mock(return_value={})
+        bot.no_plot = True
+
+        await bot.run()
+
+        bot.order_status_tracker.start_tracking.assert_not_called()

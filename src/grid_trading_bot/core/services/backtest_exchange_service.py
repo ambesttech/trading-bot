@@ -18,6 +18,20 @@ from .exceptions import (
 )
 from .exchange_interface import ExchangeInterface
 
+_TIME_COLUMN_PRIORITY = (
+    "timestamp",
+    "open_time",
+    "opentime",
+    "time",
+    "datetime",
+    "date",
+)
+_OHLCV_COLUMNS = ("open", "high", "low", "close", "volume")
+
+
+def _normalized_csv_header(name: str) -> str:
+    return name.strip().lower().replace(" ", "_")
+
 
 class BacktestExchangeService(ExchangeInterface):
     def __init__(self, config_manager: ConfigManager):
@@ -81,6 +95,51 @@ class BacktestExchangeService(ExchangeInterface):
         except ccxt.BaseError as e:
             raise DataFetchError(f"Exchange-specific error occurred: {e!s}") from e
 
+    def _standardize_ohlcv_frame(self, df: pd.DataFrame) -> pd.DataFrame:
+        if df.empty:
+            raise DataFetchError("OHLCV CSV file contains no rows.") from None
+
+        norm_to_original = {_normalized_csv_header(c): c for c in df.columns}
+        rename: dict[str, str] = {}
+
+        time_original = None
+        for key in _TIME_COLUMN_PRIORITY:
+            if key in norm_to_original:
+                time_original = norm_to_original[key]
+                rename[time_original] = "timestamp"
+                break
+        if time_original is None:
+            raise DataFetchError(
+                "OHLCV CSV must include a time column named one of: "
+                f"{', '.join(_TIME_COLUMN_PRIORITY)}. Found columns: {list(df.columns)}",
+            ) from None
+
+        for col in _OHLCV_COLUMNS:
+            if col in norm_to_original:
+                orig = norm_to_original[col]
+                if orig != time_original:
+                    rename[orig] = col
+
+        df = df.rename(columns=rename)
+        required = ("timestamp",) + _OHLCV_COLUMNS
+        missing = [c for c in required if c not in df.columns]
+        if missing:
+            raise DataFetchError(
+                f"OHLCV CSV is missing columns {missing}. Expected time + {_OHLCV_COLUMNS}. "
+                f"Found columns: {list(df.columns)}",
+            ) from None
+
+        ts = df["timestamp"]
+        df = df.copy()
+        if pd.api.types.is_numeric_dtype(ts):
+            sample = float(ts.iloc[0])
+            unit = "ms" if abs(sample) > 1e11 else "s"
+            df["timestamp"] = pd.to_datetime(ts, unit=unit)
+        else:
+            df["timestamp"] = pd.to_datetime(ts)
+
+        return df.loc[:, list(required)]
+
     def _load_ohlcv_from_file(
         self,
         file_path: str,
@@ -88,8 +147,8 @@ class BacktestExchangeService(ExchangeInterface):
         end_date: str,
     ) -> pd.DataFrame:
         try:
-            df = pd.read_csv(file_path, parse_dates=["timestamp"])
-            df["timestamp"] = pd.to_datetime(df["timestamp"])
+            df = pd.read_csv(file_path)
+            df = self._standardize_ohlcv_frame(df)
             df.set_index("timestamp", inplace=True)
             start_timestamp = pd.to_datetime(start_date).tz_localize(None)
             end_timestamp = pd.to_datetime(end_date).tz_localize(None)

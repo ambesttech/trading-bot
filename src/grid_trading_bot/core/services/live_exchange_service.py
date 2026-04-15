@@ -46,6 +46,50 @@ class LiveExchangeService(ExchangeInterface):
         self._last_known_price: float | None = None
         self._max_price_deviation: float = 0.50
 
+    def _extract_price_from_ticker(self, ticker: dict[str, Any], pair: str) -> float | None:
+        """
+        Extracts a usable price from ticker payloads across exchanges.
+
+        Some exchanges (including MEXC on WS updates) may omit `last`.
+        """
+        direct_candidates = (
+            ("last", ticker.get("last")),
+            ("close", ticker.get("close")),
+            ("mark", ticker.get("mark")),
+            ("index", ticker.get("index")),
+        )
+        for source_key, candidate in direct_candidates:
+            if candidate is None:
+                continue
+            validated = self._validate_price(candidate, pair)
+            if validated is not None:
+                return validated
+            self.logger.debug(f"Rejected ticker '{source_key}' price for {pair}: {candidate}")
+
+        bid = ticker.get("bid")
+        ask = ticker.get("ask")
+        validated_bid = self._validate_price(bid, pair) if bid is not None else None
+        validated_ask = self._validate_price(ask, pair) if ask is not None else None
+        if validated_bid is not None and validated_ask is not None:
+            return (validated_bid + validated_ask) / 2
+
+        info = ticker.get("info")
+        if isinstance(info, dict):
+            for info_key in ("lastPrice", "price", "close", "markPrice", "indexPrice"):
+                candidate = info.get(info_key)
+                if candidate is None:
+                    continue
+                validated = self._validate_price(candidate, pair)
+                if validated is not None:
+                    return validated
+                self.logger.debug(f"Rejected ticker info '{info_key}' price for {pair}: {candidate}")
+
+        self.logger.warning(
+            f"No usable ticker price for {pair}. "
+            f"last={ticker.get('last')}, close={ticker.get('close')}, bid={ticker.get('bid')}, ask={ticker.get('ask')}",
+        )
+        return None
+
     def _get_env_variable(self, key: str) -> str:
         value = os.getenv(key)
         if value is None:
@@ -130,7 +174,7 @@ class LiveExchangeService(ExchangeInterface):
         while self.connection_active:
             try:
                 ticker = await self.exchange.watch_ticker(pair)
-                current_price = self._validate_price(ticker.get("last"), pair)
+                current_price = self._extract_price_from_ticker(ticker, pair)
 
                 if current_price is None:
                     continue
@@ -202,10 +246,13 @@ class LiveExchangeService(ExchangeInterface):
     async def get_current_price(self, pair: str) -> float:
         try:
             ticker = await self.circuit_breaker.call(self.exchange.fetch_ticker, pair)
-            validated_price = self._validate_price(ticker.get("last"), pair)
+            validated_price = self._extract_price_from_ticker(ticker, pair)
 
             if validated_price is None:
-                raise DataFetchError(f"Invalid price received for {pair}: {ticker.get('last')}")
+                raise DataFetchError(
+                    f"Invalid price received for {pair}: "
+                    f"last={ticker.get('last')}, close={ticker.get('close')}, bid={ticker.get('bid')}, ask={ticker.get('ask')}",
+                )
 
             return validated_price
 

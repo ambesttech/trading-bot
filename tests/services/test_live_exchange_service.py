@@ -370,6 +370,22 @@ class TestLiveExchangeService:
 
     @pytest.mark.asyncio
     @pytest.mark.timeout(2)
+    async def test_subscribe_to_ticker_updates_uses_close_fallback(self, setup_websocket_test):
+        service, mock_exchange_instance, on_ticker_update = setup_websocket_test
+        mock_exchange_instance.watch_ticker = AsyncMock(
+            side_effect=[
+                {"last": None, "close": 49999.5},
+                asyncio.CancelledError(),
+            ],
+        )
+
+        await service._subscribe_to_ticker_updates("BTC/USD", on_ticker_update, 0.1)
+
+        on_ticker_update.assert_awaited_once_with(49999.5)
+        assert not service.connection_active
+
+    @pytest.mark.asyncio
+    @pytest.mark.timeout(2)
     @patch("grid_trading_bot.core.services.live_exchange_service.ccxtpro")
     @patch("grid_trading_bot.core.services.live_exchange_service.getattr")
     @patch("grid_trading_bot.core.services.live_exchange_service.asyncio.sleep", new_callable=AsyncMock)
@@ -628,6 +644,26 @@ class TestLiveExchangeService:
 
         with pytest.raises(DataFetchError, match="Invalid price received"):
             await service.get_current_price("BTC/USD")
+
+    @pytest.mark.asyncio
+    @patch("grid_trading_bot.core.services.live_exchange_service.ccxtpro")
+    @patch("grid_trading_bot.core.services.live_exchange_service.getattr")
+    async def test_get_current_price_uses_close_fallback(
+        self,
+        mock_getattr,
+        mock_ccxtpro,
+        config_manager,
+        setup_env_vars,
+        mock_exchange_instance,
+    ):
+        mock_getattr.return_value = mock_ccxtpro.binance
+        mock_ccxtpro.binance.return_value = mock_exchange_instance
+        mock_exchange_instance.fetch_ticker.return_value = {"last": None, "close": 50001.0}
+
+        service = LiveExchangeService(config_manager, is_paper_trading_activated=False)
+        result = await service.get_current_price("BTC/USD")
+
+        assert result == 50001.0
 
 
 class TestLiveExchangeServiceCircuitBreaker:

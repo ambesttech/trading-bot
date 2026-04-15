@@ -24,7 +24,7 @@ class ConfigValidator:
         missing_grid_settings, invalid_grid_settings = self._validate_grid_strategy(config)
         missing_fields += missing_grid_settings
         invalid_fields += invalid_grid_settings
-        invalid_fields += self._validate_limits(config)
+        invalid_fields += self._validate_risk_management(config)
         missing_logging_settings, invalid_logging_settings = self._validate_logging(config)
         missing_fields += missing_logging_settings
         invalid_fields += invalid_logging_settings
@@ -169,7 +169,7 @@ class ConfigValidator:
 
         return missing_fields, invalid_fields
 
-    def _validate_limits(self, config: dict[str, Any]) -> list[str]:
+    def _validate_risk_management(self, config: dict[str, Any]) -> list[str]:
         invalid_fields: list[str] = []
         limits = config.get("risk_management", {})
         take_profit = limits.get("take_profit", {})
@@ -192,6 +192,102 @@ class ConfigValidator:
         if stop_loss.get("threshold") is None or not isinstance(stop_loss.get("threshold"), float | int):
             self.logger.error("Invalid or missing stop loss threshold.")
             invalid_fields.append("risk_management.stop_loss.threshold")
+
+        invalid_fields += self._validate_position_sizing(config)
+        invalid_fields += self._validate_risk_safety_checks(config, take_profit, stop_loss)
+        return invalid_fields
+
+    def _validate_position_sizing(self, config: dict[str, Any]) -> list[str]:
+        invalid_fields: list[str] = []
+        ps = config.get("risk_management", {}).get("position_sizing")
+        if ps is None:
+            return invalid_fields
+        if not isinstance(ps, dict):
+            self.logger.error("risk_management.position_sizing must be an object.")
+            invalid_fields.append("risk_management.position_sizing")
+            return invalid_fields
+
+        max_frac = ps.get("max_portfolio_fraction", 1.0)
+        max_frac_valid = isinstance(max_frac, int | float) and 0 < max_frac <= 1
+        if not max_frac_valid:
+            self.logger.error("max_portfolio_fraction must be a number in (0, 1].")
+            invalid_fields.append("risk_management.position_sizing.max_portfolio_fraction")
+
+        min_quote = ps.get("min_quote_notional_per_grid")
+        if min_quote is not None:
+            if not isinstance(min_quote, int | float) or min_quote <= 0:
+                self.logger.error("min_quote_notional_per_grid must be a positive number when set.")
+                invalid_fields.append("risk_management.position_sizing.min_quote_notional_per_grid")
+            elif max_frac_valid:
+                trading = config.get("trading_settings", {})
+                grid = config.get("grid_strategy", {})
+                initial = trading.get("initial_balance")
+                num_grids = grid.get("num_grids")
+                if isinstance(initial, int | float) and isinstance(num_grids, int) and num_grids > 0:
+                    quote_per_grid = float(initial) * float(max_frac) / num_grids
+                    if quote_per_grid < float(min_quote):
+                        self.logger.error(
+                            "initial_balance * max_portfolio_fraction / num_grids must be >= "
+                            "min_quote_notional_per_grid.",
+                        )
+                        invalid_fields.append("risk_management.position_sizing.min_quote_notional_per_grid")
+
+        return invalid_fields
+
+    def _validate_risk_safety_checks(
+        self,
+        config: dict[str, Any],
+        take_profit: dict[str, Any],
+        stop_loss: dict[str, Any],
+    ) -> list[str]:
+        invalid_fields: list[str] = []
+        safety = config.get("risk_management", {}).get("safety")
+
+        tp_on = take_profit.get("enabled") is True
+        sl_on = stop_loss.get("enabled") is True
+        tp_th = take_profit.get("threshold")
+        sl_th = stop_loss.get("threshold")
+
+        if tp_on and sl_on and isinstance(tp_th, int | float) and isinstance(sl_th, int | float):
+            if sl_th >= tp_th:
+                self.logger.error(
+                    "When both take-profit and stop-loss are enabled, stop_loss.threshold must be "
+                    "strictly less than take_profit.threshold.",
+                )
+                invalid_fields.append("risk_management.stop_loss.threshold")
+                invalid_fields.append("risk_management.take_profit.threshold")
+
+        if safety is not None and not isinstance(safety, dict):
+            self.logger.error("risk_management.safety must be an object.")
+            invalid_fields.append("risk_management.safety")
+            return invalid_fields
+
+        enforce_grid = bool(safety.get("enforce_tp_sl_vs_grid_range")) if isinstance(safety, dict) else False
+
+        if enforce_grid:
+            grid = config.get("grid_strategy", {})
+            range_ = grid.get("range", {})
+            top = range_.get("top")
+            bottom = range_.get("bottom")
+            if isinstance(top, int | float) and isinstance(bottom, int | float):
+                if tp_on and isinstance(tp_th, int | float) and tp_th <= top:
+                    self.logger.error(
+                        "safety.enforce_tp_sl_vs_grid_range requires take_profit.threshold > "
+                        "grid_strategy.range.top.",
+                    )
+                    invalid_fields.append("risk_management.take_profit.threshold")
+                if sl_on and isinstance(sl_th, int | float) and sl_th >= bottom:
+                    self.logger.error(
+                        "safety.enforce_tp_sl_vs_grid_range requires stop_loss.threshold < "
+                        "grid_strategy.range.bottom.",
+                    )
+                    invalid_fields.append("risk_management.stop_loss.threshold")
+
+        if isinstance(safety, dict):
+            flag = safety.get("enforce_tp_sl_vs_grid_range")
+            if flag is not None and not isinstance(flag, bool):
+                self.logger.error("enforce_tp_sl_vs_grid_range must be a boolean.")
+                invalid_fields.append("risk_management.safety.enforce_tp_sl_vs_grid_range")
 
         return invalid_fields
 

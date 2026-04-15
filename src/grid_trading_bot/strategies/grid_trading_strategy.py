@@ -65,9 +65,17 @@ class GridTradingStrategy(TradingStrategyInterface):
 
         try:
             timeframe, start_date, end_date = self._extract_config()
-            return await asyncio.to_thread(
+            result = await asyncio.to_thread(
                 self.exchange_service.fetch_ohlcv, self.trading_pair, timeframe, start_date, end_date
             )
+            if result.empty:
+                self.logger.error(
+                    "No OHLCV rows fall between the configured start_date and end_date. "
+                    "Align trading_settings.period with the timestamp range in your CSV "
+                    "(or widen the period).",
+                )
+                return None
+            return result
         except (DataFetchError, HistoricalMarketDataFileNotFoundError) as e:
             self.logger.error(f"Failed to initialize data for backtest trading mode: {e}")
             return None
@@ -188,6 +196,15 @@ class GridTradingStrategy(TradingStrategyInterface):
                     last_price = current_price
                     return
 
+                if self.trading_mode == TradingMode.PAPER_TRADING and self.order_simulator is not None:
+                    high_price = max(last_price, current_price) if last_price is not None else current_price
+                    low_price = min(last_price, current_price) if last_price is not None else current_price
+                    await self.order_simulator.simulate_order_fills(
+                        high_price=high_price,
+                        low_price=low_price,
+                        timestamp=pd.Timestamp.now(),
+                    )
+
                 if await self._handle_take_profit_stop_loss(current_price):
                     return
 
@@ -219,7 +236,7 @@ class GridTradingStrategy(TradingStrategyInterface):
         Args:
             trigger_price (float): The price at which grid orders are triggered.
         """
-        if self.data is None:
+        if self.data is None or self.data.empty:
             self.logger.error("No data available for backtesting.")
             return
 
@@ -269,7 +286,9 @@ class GridTradingStrategy(TradingStrategyInterface):
         skip_initial_purchase: bool = False,
     ) -> bool:
         """
-        Performs the initial purchase and grid order setup when the trigger price is first crossed.
+        Performs initial purchase and grid setup once when either:
+        - current price enters configured grid range, or
+        - trigger crossing condition is met.
 
         Returns:
             bool: True if grid orders have been initialized, False otherwise.
@@ -277,16 +296,26 @@ class GridTradingStrategy(TradingStrategyInterface):
         if grid_orders_initialized:
             return True
 
-        if last_price is None:
-            self.logger.debug("No previous price recorded yet. Waiting for the next price update.")
-            return False
+        price_grids = getattr(self.grid_manager, "price_grids", None)
+        in_configured_range = False
+        if isinstance(price_grids, list) and price_grids:
+            min_grid = min(price_grids)
+            max_grid = max(price_grids)
+            in_configured_range = min_grid <= current_price <= max_grid
 
-        if last_price <= trigger_price <= current_price or last_price == trigger_price:
+        trigger_crossed = (
+            last_price is not None and (last_price <= trigger_price <= current_price or last_price == trigger_price)
+        )
+
+        if in_configured_range or trigger_crossed:
             if not skip_initial_purchase:
-                self.logger.info(
-                    f"Current price {current_price} reached trigger price {trigger_price}. "
-                    f"Will perform initial purchase",
-                )
+                if in_configured_range:
+                    self.logger.info(f"Current price {current_price} entered grid range. Will perform initial purchase")
+                else:
+                    self.logger.info(
+                        f"Current price {current_price} reached trigger price {trigger_price}. "
+                        f"Will perform initial purchase",
+                    )
                 await self.order_manager.perform_initial_purchase(current_price)
                 await self.event_bus.publish(Events.INITIAL_PURCHASE_DONE, None)
             else:
@@ -297,7 +326,8 @@ class GridTradingStrategy(TradingStrategyInterface):
             return True
 
         self.logger.debug(
-            f"Current price {current_price} did not cross trigger price {trigger_price}. Last price: {last_price}.",
+            f"Current price {current_price} did not initialize grid orders. "
+            f"Trigger: {trigger_price}, last_price: {last_price}, in_range: {in_configured_range}.",
         )
         return False
 

@@ -29,7 +29,7 @@ loki.process "bot_logs" {
   // Extract labels from the log filename
   stage.regex {
     source     = "filename"
-    expression = "/bot_(?P<base_currency>[A-Z]+)_(?P<quote_currency>[A-Z]+)_(?P<trading_mode>[A-Z_]+)_strategy(?P<strategy_type>[A-Z_]+)_spacing(?P<spacing_type>[A-Z]+)_size(?P<grid_size>\\d+)_range(?P<grid_range>\\d+-\\d+)_.*\\.log$"
+    expression = "/bot_(?P<base_currency>[A-Z]+)_(?P<quote_currency>[A-Z]+)_(?P<trading_mode>[A-Z_]+)_strategy(?P<strategy_type>[A-Z_]+)_spacing(?P<spacing_type>[A-Z]+)_size(?P<grid_size>\\d+)_range(?P<grid_range>\\d+(?:\\.\\d+)?-\\d+(?:\\.\\d+)?)_.*\\.log$"
   }
 
   // Derive trading_pair from base/quote
@@ -65,17 +65,8 @@ loki.process "bot_logs" {
     }
   }
 
-  // Reconstruct timestamp with period instead of comma (Go time.Parse requirement)
-  stage.template {
-    source   = "timestamp"
-    template = "{{ .ts_date }}.{{ .ts_ms }}"
-  }
-
-  // Parse the reconstructed timestamp so Loki indexes by original log time
-  stage.timestamp {
-    source = "timestamp"
-    format = "2006-01-02 15:04:05.000"
-  }
+  // Keep Loki ingestion time to avoid timezone skew issues between
+  // bot log timestamps and dashboard time window filtering.
 
   forward_to = [loki.write.default.receiver]
 }

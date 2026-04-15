@@ -149,6 +149,30 @@ class TestGridTradingStrategy:
 
         exchange_service.listen_to_ticker_updates.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_run_paper_trading_simulates_fills(self, setup_strategy):
+        create_strategy, _, exchange_service, _, _, balance_tracker, _, _, _ = setup_strategy
+        strategy = create_strategy(TradingMode.PAPER_TRADING)
+        strategy._initialize_grid_orders_once = AsyncMock(side_effect=[True, True, True])
+        strategy._handle_take_profit_stop_loss = AsyncMock(return_value=False)
+        balance_tracker.get_total_balance_value.return_value = 1000.0
+        strategy._running = True
+
+        async def emit_updates(pair, callback, interval):
+            await callback(100.0)
+            await callback(100.5)
+            strategy._running = False
+            await callback(101.0)
+
+        exchange_service.listen_to_ticker_updates = AsyncMock(side_effect=emit_updates)
+
+        await strategy.run()
+
+        strategy.order_simulator.simulate_order_fills.assert_awaited()
+        second_call_kwargs = strategy.order_simulator.simulate_order_fills.await_args_list[1].kwargs
+        assert second_call_kwargs["high_price"] == 100.5
+        assert second_call_kwargs["low_price"] == 100.0
+
     def test_generate_performance_report(self, setup_strategy):
         create_strategy, _, _, _, _, balance_tracker, trading_performance_analyzer, _, _ = setup_strategy
         strategy = create_strategy()
@@ -466,6 +490,25 @@ class TestGridTradingStrategy:
         assert result is True
         order_manager.perform_initial_purchase.assert_called_once_with(15000)
         order_manager.initialize_grid_orders.assert_called_once_with(15000)
+
+    @pytest.mark.asyncio
+    async def test_initialize_grid_orders_once_when_price_enters_range(self, setup_strategy):
+        create_strategy, _, _, grid_manager, order_manager, _, _, _, _ = setup_strategy
+        strategy = create_strategy(TradingMode.PAPER_TRADING)
+        grid_manager.price_grids = [85.0, 86.0, 87.0]
+        order_manager.perform_initial_purchase = AsyncMock()
+        order_manager.initialize_grid_orders = AsyncMock()
+
+        result = await strategy._initialize_grid_orders_once(
+            current_price=86.5,
+            trigger_price=90.0,
+            grid_orders_initialized=False,
+            last_price=None,
+        )
+
+        assert result is True
+        order_manager.perform_initial_purchase.assert_called_once_with(86.5)
+        order_manager.initialize_grid_orders.assert_called_once_with(86.5)
 
     @pytest.mark.asyncio
     async def test_run_live_trading_stop_condition(self, setup_strategy):

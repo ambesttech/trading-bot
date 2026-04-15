@@ -13,13 +13,18 @@ from grid_trading_bot.core.order_handling.execution_strategy.live_order_executio
 from grid_trading_bot.core.order_handling.execution_strategy.order_execution_strategy_factory import (
     OrderExecutionStrategyFactory,
 )
+from grid_trading_bot.core.order_handling.execution_strategy.paper_order_execution_strategy import (
+    PaperOrderExecutionStrategy,
+)
 from grid_trading_bot.core.services.exchange_interface import ExchangeInterface
 
 
 class TestOrderExecutionStrategyFactory:
     @pytest.fixture
     def config_manager(self):
-        return Mock(spec=ConfigManager)
+        config = Mock(spec=ConfigManager)
+        config.get_backtest_slippage.return_value = 0.0
+        return config
 
     @pytest.fixture
     def exchange_service(self):
@@ -43,11 +48,8 @@ class TestOrderExecutionStrategyFactory:
 
         assert isinstance(
             strategy,
-            LiveOrderExecutionStrategy,
-        ), "Expected LiveOrderExecutionStrategy instance for paper trading mode"
-        assert (
-            strategy.exchange_service == exchange_service
-        ), "Expected exchange_service to be set correctly in LiveOrderExecutionStrategy"
+            PaperOrderExecutionStrategy,
+        ), "Expected PaperOrderExecutionStrategy instance for paper trading mode"
 
     def test_create_backtest_strategy(self, config_manager, exchange_service):
         config_manager.get_trading_mode.return_value = TradingMode.BACKTEST

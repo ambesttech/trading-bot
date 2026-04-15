@@ -87,7 +87,9 @@ class GridManager:
             The calculated order size as a float.
         """
         total_grids = len(self.grid_levels)
-        base_size = total_balance / total_grids / current_price
+        fraction = self.config_manager.get_max_portfolio_fraction_for_sizing()
+        effective_balance = total_balance * fraction
+        base_size = effective_balance / total_grids / current_price
         ratio = self.buy_ratio if side == OrderSide.BUY else self.sell_ratio
         return base_size * ratio
 
@@ -110,7 +112,9 @@ class GridManager:
         """
         current_crypto_value_in_fiat = current_crypto_balance * current_price
         total_portfolio_value = current_fiat_balance + current_crypto_value_in_fiat
-        target_crypto_allocation_in_fiat = total_portfolio_value / 2  # Allocate 50% of balance for initial buy
+        fraction = self.config_manager.get_max_portfolio_fraction_for_sizing()
+        effective_portfolio = total_portfolio_value * fraction
+        target_crypto_allocation_in_fiat = effective_portfolio / 2  # 50% of risk budget in base value terms
         fiat_to_allocate_for_purchase = target_crypto_allocation_in_fiat - current_crypto_value_in_fiat
         fiat_to_allocate_for_purchase = max(0, min(fiat_to_allocate_for_purchase, current_fiat_balance))
         return fiat_to_allocate_for_purchase / current_price

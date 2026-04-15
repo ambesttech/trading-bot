@@ -5,6 +5,8 @@ description = "Open-source cryptocurrency trading bot designed to perform grid t
 authors = [{ name = "Jordan TETE", email = "tetej171@gmail.com" }]
 readme = "README.md"
 license = { file = "LICENSE.txt" }
+# On Windows, use 64-bit CPython (win_amd64). 32-bit Python has no PyPI wheels for
+# coincurve (a ccxt dependency), so installs fall back to a broken source build.
 requires-python = ">=3.12"
 keywords = ["grid-trading", "trading-bot", "cryptocurrency", "backtesting", "ccxt"]
 classifiers = [
@@ -27,7 +29,8 @@ dependencies = [
     "ccxt==4.5.44",
     "psutil==7.2.2",
     "python-dotenv==1.2.2",
-    "click>=8.1"
+    "click>=8.1",
+    "protobuf==5.29.5",
 ]
 
 [project.scripts]
@@ -51,6 +54,12 @@ repository = "https://github.com/jordantete/grid_trading_bot"
 documentation = "https://jordantete.github.io/grid_trading_bot/"
 issues = "https://github.com/jordantete/grid_trading_bot/issues"
 discussions = "https://github.com/jordantete/grid_trading_bot/discussions"
+
+# Prefer installs like Python.org/Store over uv-managed downloads. On Windows, uv's
+# default can otherwise pick a newer *managed* patch that exists only as 32-bit (x86),
+# which breaks wheels for ccxt → coincurve.
+[tool.uv]
+python-preference = "system"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

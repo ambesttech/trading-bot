@@ -29,8 +29,8 @@ The bot is configured via a JSON file (typically `config/config.json`). This pag
     "spacing": "geometric",
     "num_grids": 8,
     "range": {
-      "top": 200,
-      "bottom": 250
+      "top": 250,
+      "bottom": 200
     },
     "buy_ratio": 1.0,
     "sell_ratio": 0.5
@@ -38,11 +38,18 @@ The bot is configured via a JSON file (typically `config/config.json`). This pag
   "risk_management": {
     "take_profit": {
       "enabled": false,
-      "threshold": 300
+      "threshold": 280
     },
     "stop_loss": {
       "enabled": false,
-      "threshold": 150
+      "threshold": 180
+    },
+    "position_sizing": {
+      "max_portfolio_fraction": 1.0,
+      "min_quote_notional_per_grid": 10
+    },
+    "safety": {
+      "enforce_tp_sl_vs_grid_range": false
     }
   },
   "execution": {
@@ -115,9 +122,26 @@ The bot is configured via a JSON file (typically `config/config.json`). This pag
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `take_profit.enabled` | bool | Yes | Whether take-profit is active. |
-| `take_profit.threshold` | float | Yes | Price at which to take profit. |
+| `take_profit.threshold` | float | Yes | Spot price at or above which take-profit triggers (market sell, then bot stops). Compare to your pair’s quote price. |
 | `stop_loss.enabled` | bool | Yes | Whether stop-loss is active. |
-| `stop_loss.threshold` | float | Yes | Price at which to stop loss. |
+| `stop_loss.threshold` | float | Yes | Spot price at or below which stop-loss triggers (market sell, then bot stops). |
+
+**Ordering when both are enabled:** `stop_loss.threshold` must be strictly less than `take_profit.threshold`.
+
+#### `position_sizing` *(optional)*
+
+Caps how much of total portfolio value (in quote terms) is used to size grid limit orders and the initial inventory target. Omit this object for full-portfolio sizing (`max_portfolio_fraction` defaults to `1.0`).
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `max_portfolio_fraction` | float | `1.0` | Fraction in `(0, 1]` of marked-to-market portfolio value used for per-grid order sizing and the 50% initial-base target. `0.5` uses half the portfolio for those calculations. |
+| `min_quote_notional_per_grid` | float | — | If set, must be positive. Startup validation requires `initial_balance * max_portfolio_fraction / num_grids` ≥ this value so each grid line has enough quote notional; fails fast if the grid is too tight for the balance. |
+
+#### `safety` *(optional)*
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `enforce_tp_sl_vs_grid_range` | bool | `false` | When `true` and the corresponding exit is enabled: take-profit threshold must be **greater** than `grid_strategy.range.top`, and stop-loss threshold must be **less** than `grid_strategy.range.bottom` (long grid: exit above the grid for TP, below for SL). |
 
 ### `execution` *(optional)*
 

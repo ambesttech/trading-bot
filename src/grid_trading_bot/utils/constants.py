@@ -1,5 +1,6 @@
 CANDLE_LIMITS = {
     "binance": 1000,
+    "mexc": 1000,
     "coinbase": 300,
     "kraken": 720,
     "bitfinex": 5000,

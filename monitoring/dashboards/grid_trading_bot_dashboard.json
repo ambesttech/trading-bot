@@ -31,96 +31,231 @@
         "refresh": 2,
         "includeAll": false,
         "current": {}
+      },
+      {
+        "name": "candle_interval",
+        "type": "custom",
+        "label": "Candle Interval",
+        "query": "15s,30s,1m,5m",
+        "current": {
+          "text": "1m",
+          "value": "1m"
+        },
+        "options": [
+          {
+            "text": "15s",
+            "value": "15s",
+            "selected": false
+          },
+          {
+            "text": "30s",
+            "value": "30s",
+            "selected": false
+          },
+          {
+            "text": "1m",
+            "value": "1m",
+            "selected": true
+          },
+          {
+            "text": "5m",
+            "value": "5m",
+            "selected": false
+          }
+        ]
       }
     ]
   },
   "panels": [
     {
-      "id": 1,
-      "title": "Price & Orders",
-      "type": "timeseries",
+      "type": "row",
+      "title": "A. Key Performance Indicators (Stat Panels)",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 101,
+      "title": "Bot Status",
+      "type": "stat",
       "datasource": "Loki",
-      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 0 },
+      "gridPos": {
+        "h": 6,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      },
       "targets": [
         {
           "refId": "A",
-          "expr": "last_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\"} |~ \"LiveExchangeService|BacktestExchangeService\" |= \"current price\" | regexp \"current price: (?P<price>[\\\\d.]+)\" | unwrap price [$__auto])",
-          "legendFormat": "Price"
-        },
-        {
-          "refId": "B",
-          "expr": "last_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\"} |= \"OrderManager\" |= \"buy limit order\" | regexp \"at grid level (?P<price>[\\\\d.]+)\" | unwrap price [$__auto])",
-          "legendFormat": "Buy Order"
-        },
-        {
-          "refId": "C",
-          "expr": "last_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\"} |= \"OrderManager\" |= \"sell limit order\" | regexp \"at grid level (?P<price>[\\\\d.]+)\" | unwrap price [$__auto])",
-          "legendFormat": "Sell Order"
+          "expr": "sum(count_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\", trading_mode=\"$trading_mode\"} |= \"current price\" [2m]))",
+          "legendFormat": "Heartbeat"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "none",
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "showPoints": "auto"
-          }
-        },
-        "overrides": [
-          {
-            "matcher": { "id": "byName", "options": "Price" },
-            "properties": [
-              { "id": "custom.drawStyle", "value": "line" },
-              { "id": "custom.lineWidth", "value": 2 },
-              { "id": "custom.showPoints", "value": "never" }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "Buy Order" },
-            "properties": [
-              { "id": "custom.drawStyle", "value": "points" },
-              { "id": "custom.pointSize", "value": 8 },
-              { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "Sell Order" },
-            "properties": [
-              { "id": "custom.drawStyle", "value": "points" },
-              { "id": "custom.pointSize", "value": 8 },
-              { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": 0,
+                "color": "red"
+              },
+              {
+                "value": 1,
+                "color": "green"
+              }
             ]
           }
-        ]
+        }
       },
       "options": {
-        "tooltip": { "mode": "multi" },
-        "legend": { "displayMode": "list", "placement": "bottom" }
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "value_and_name"
       }
     },
     {
-      "id": 2,
-      "title": "Balance History",
-      "type": "timeseries",
+      "id": 102,
+      "title": "Real-Time PnL (Base Balance Delta)",
+      "type": "stat",
       "datasource": "Loki",
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 12 },
+      "gridPos": {
+        "h": 6,
+        "w": 4,
+        "x": 4,
+        "y": 1
+      },
       "targets": [
         {
           "refId": "A",
-          "expr": "last_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\"} |= \"BalanceTracker\" |= \"Updated balances\" | regexp \"Fiat balance: (?P<fiat>[\\\\d.]+)\" | unwrap fiat [$__auto])",
-          "legendFormat": "Fiat ($trading_pair quote)"
+          "expr": "last_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\", trading_mode=\"$trading_mode\"} |= \"BalanceTracker\" |= \"Total base balance\" | regexp \"Total base balance: (?P<v>[\\\\d.]+)\" | unwrap v [5m]) - first_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\", trading_mode=\"$trading_mode\"} |= \"BalanceTracker\" |= \"Total base balance\" | regexp \"Total base balance: (?P<v>[\\\\d.]+)\" | unwrap v [5m])",
+          "legendFormat": "PnL 5m"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
         },
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 103,
+      "title": "Total Realized Profit (Proxy)",
+      "type": "stat",
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 6,
+        "w": 4,
+        "x": 8,
+        "y": 1
+      },
+      "targets": [
         {
-          "refId": "B",
-          "expr": "last_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\"} |= \"BalanceTracker\" |= \"Updated balances\" | regexp \"Crypto balance: (?P<crypto>[\\\\d.]+)\" | unwrap crypto [$__auto])",
-          "legendFormat": "Crypto ($trading_pair base)"
+          "refId": "A",
+          "expr": "sum(count_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\", trading_mode=\"$trading_mode\"} |= \"OrderManager\" |= \"Sell order completed at grid level\" [$__range]))",
+          "legendFormat": "Sell Fills"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
         },
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 104,
+      "title": "Unrealized PnL (Proxy)",
+      "type": "stat",
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 6,
+        "w": 4,
+        "x": 12,
+        "y": 1
+      },
+      "targets": [
         {
-          "refId": "C",
-          "expr": "last_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\"} |= \"BalanceTracker\" |= \"Updated balances\" | regexp \"Total base balance: (?P<total_base>[\\\\d.]+)\" | unwrap total_base [$__auto])",
-          "legendFormat": "Total ($trading_pair base)"
+          "refId": "A",
+          "expr": "last_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\", trading_mode=\"$trading_mode\"} |= \"BalanceTracker\" |= \"Total base balance\" | regexp \"Total base balance: (?P<v>[\\\\d.]+)\" | unwrap v [$__auto])",
+          "legendFormat": "Total Base"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "type": "row",
+      "title": "B. Trading Activity (Time Series Panels)",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 7
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 201,
+      "title": "Orders per Minute",
+      "type": "timeseries",
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\", trading_mode=\"$trading_mode\"} |= \"OrderManager\" |= \"order completed at grid level\" [1m]))",
+          "legendFormat": "Orders/min"
         }
       ],
       "fieldConfig": {
@@ -128,184 +263,492 @@
           "custom": {
             "drawStyle": "line",
             "lineWidth": 2,
-            "fillOpacity": 10,
             "showPoints": "auto"
           }
+        }
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
         },
-        "overrides": [
-          {
-            "matcher": { "id": "byFrameRefID", "options": "A" },
-            "properties": [
-              { "id": "custom.axisPlacement", "value": "left" },
-              { "id": "custom.axisLabel", "value": "Fiat" }
-            ]
-          },
-          {
-            "matcher": { "id": "byFrameRefID", "options": "B" },
-            "properties": [
-              { "id": "custom.axisPlacement", "value": "right" },
-              { "id": "custom.axisLabel", "value": "Crypto" }
-            ]
-          },
-          {
-            "matcher": { "id": "byFrameRefID", "options": "C" },
-            "properties": [
-              { "id": "custom.axisPlacement", "value": "right" },
-              { "id": "custom.axisLabel", "value": "Total (base)" },
-              { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } },
-              { "id": "color", "value": { "mode": "fixed", "fixedColor": "yellow" } }
-            ]
-          }
-        ]
-      },
-      "options": {
-        "tooltip": { "mode": "multi" },
-        "legend": { "displayMode": "list", "placement": "bottom" }
-      }
-    },
-    {
-      "id": 3,
-      "title": "System Health (CPU %)",
-      "type": "gauge",
-      "datasource": "Loki",
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 22 },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "last_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\"} |= \"HealthCheck\" |= \"System resource usage\" | regexp \"'cpu': (?P<cpu>[\\\\d.]+)\" | unwrap cpu [$__auto])"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "min": 0,
-          "max": 100,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "value": 0, "color": "green" },
-              { "value": 70, "color": "yellow" },
-              { "value": 85, "color": "red" }
-            ]
-          }
-        }
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": ["lastNotNull"]
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
         }
       }
     },
     {
-      "id": 4,
-      "title": "Strategy Overview",
-      "type": "table",
+      "id": 202,
+      "title": "Filled Buy vs Sell Orders",
+      "type": "timeseries",
       "datasource": "Loki",
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 22 },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 8
+      },
       "targets": [
         {
           "refId": "A",
-          "expr": "{job=\"grid_trading_bot\", trading_pair=\"$trading_pair\", strategy_type=\"$strategy\", service=\"GridManager\"} |= \"Grids and levels initialized\" | line_format \"Grid Size: {{.grid_size}} | Range: {{.grid_range}} | Spacing: {{.spacing_type}} | Strategy: {{.strategy_type}}\"",
-          "maxLines": 1
-        }
-      ],
-      "options": {
-        "showHeader": false,
-        "cellHeight": "lg"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "fixed", "fixedColor": "blue" },
-          "custom": {
-            "align": "center",
-            "cellOptions": { "type": "color-text" }
-          }
-        },
-        "overrides": [
-          {
-            "matcher": { "id": "byName", "options": "Time" },
-            "properties": [{ "id": "custom.hidden", "value": true }]
-          },
-          {
-            "matcher": { "id": "byName", "options": "id" },
-            "properties": [{ "id": "custom.hidden", "value": true }]
-          },
-          {
-            "matcher": { "id": "byName", "options": "tsNs" },
-            "properties": [{ "id": "custom.hidden", "value": true }]
-          },
-          {
-            "matcher": { "id": "byName", "options": "labels" },
-            "properties": [{ "id": "custom.hidden", "value": true }]
-          }
-        ]
-      },
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "id": true,
-              "tsNs": true,
-              "labels": true
-            }
-          }
-        }
-      ]
-    },
-    {
-      "id": 5,
-      "title": "Executed Trades",
-      "type": "stat",
-      "datasource": "Loki",
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 22 },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(count_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\"} |= \"OrderManager\" |= \"Buy order completed at grid level\" [$__auto]))",
-          "legendFormat": "Buy Fills"
+          "expr": "sum(count_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\", trading_mode=\"$trading_mode\"} |= \"OrderManager\" |= \"Buy order completed at grid level\" [1m]))",
+          "legendFormat": "Buy Fills/min"
         },
         {
           "refId": "B",
-          "expr": "sum(count_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\"} |= \"OrderManager\" |= \"Sell order completed at grid level\" [$__auto]))",
-          "legendFormat": "Sell Fills"
+          "expr": "sum(count_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\", trading_mode=\"$trading_mode\"} |= \"OrderManager\" |= \"Sell order completed at grid level\" [1m]))",
+          "legendFormat": "Sell Fills/min"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "none",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "value": 0, "color": "text" },
-              { "value": 1, "color": "green" }
-            ]
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "showPoints": "auto"
           }
+        }
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
         },
-        "overrides": [
-          {
-            "matcher": { "id": "byName", "options": "Buy Fills" },
-            "properties": [
-              { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "Sell Fills" },
-            "properties": [
-              { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }
-            ]
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 203,
+      "title": "Cumulative PnL (Proxy: Total Base Balance)",
+      "type": "timeseries",
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "last_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\", trading_mode=\"$trading_mode\"} |= \"BalanceTracker\" |= \"Total base balance\" | regexp \"Total base balance: (?P<v>[\\\\d.]+)\" | unwrap v [$__auto])",
+          "legendFormat": "Total Base"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "showPoints": "auto"
           }
-        ]
+        }
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 204,
+      "title": "Market Price vs Average Fill Price",
+      "type": "timeseries",
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "last_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\", trading_mode=\"$trading_mode\"} |~ \"LiveExchangeService|BacktestExchangeService\" |= \"current price\" | regexp \"current price: (?P<price>[\\\\d.]+)\" | unwrap price [$__auto])",
+          "legendFormat": "Market Price"
+        },
+        {
+          "refId": "B",
+          "expr": "avg_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\", trading_mode=\"$trading_mode\"} |= \"OrderManager\" |~ \"Buy order completed at grid level|Sell order completed at grid level\" | regexp \"grid level (?P<price>[\\\\d.]+)\" | unwrap price [5m])",
+          "legendFormat": "Avg Fill Price (5m)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "showPoints": "auto"
+          }
+        }
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 205,
+      "title": "Inventory Over Time",
+      "type": "timeseries",
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "last_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\", trading_mode=\"$trading_mode\"} |= \"BalanceTracker\" |= \"Crypto balance\" | regexp \"Crypto balance: (?P<crypto>[\\\\d.]+)\" | unwrap crypto [$__auto])",
+          "legendFormat": "Crypto Inventory"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "showPoints": "auto"
+          }
+        }
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "type": "row",
+      "title": "C. Grid Strategy Insights",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 25
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 301,
+      "title": "Active Grid Levels (Approx)",
+      "type": "stat",
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 26
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\", trading_mode=\"$trading_mode\"} |= \"marked as pending at grid level\" [15m]))",
+          "legendFormat": "Pending Levels"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        }
       },
       "options": {
         "reduceOptions": {
-          "calcs": ["sum"]
+          "calcs": [
+            "lastNotNull"
+          ]
         },
         "graphMode": "none",
         "colorMode": "value",
-        "textMode": "value_and_name",
-        "orientation": "horizontal"
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 302,
+      "title": "Profit per Grid Level (Proxy: Sell Fills by Grid)",
+      "type": "timeseries",
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 6,
+        "y": 26
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (grid_level) (count_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\", trading_mode=\"$trading_mode\"} |= \"OrderManager\" |= \"Sell order completed at grid level\" | regexp \"grid level (?P<grid_level>[\\\\d.]+)\" [5m]))",
+          "legendFormat": "Grid {{grid_level}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "showPoints": "auto"
+          }
+        }
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 303,
+      "title": "Buy/Sell Ratio",
+      "type": "stat",
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 18,
+        "y": 26
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(sum(count_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\", trading_mode=\"$trading_mode\"} |= \"OrderManager\" |= \"Buy order completed at grid level\" [$__range])) + 0.0001) / (sum(count_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\", trading_mode=\"$trading_mode\"} |= \"OrderManager\" |= \"Sell order completed at grid level\" [$__range])) + 0.0001)",
+          "legendFormat": "Buy/Sell"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 304,
+      "title": "Trade Distribution by Price (Fills by Grid)",
+      "type": "timeseries",
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 32
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (grid_level) (count_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\", trading_mode=\"$trading_mode\"} |= \"OrderManager\" |~ \"Buy order completed at grid level|Sell order completed at grid level\" | regexp \"grid level (?P<grid_level>[\\\\d.]+)\" [10m]))",
+          "legendFormat": "{{grid_level}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "showPoints": "auto"
+          }
+        }
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "type": "row",
+      "title": "D. System Health Monitoring",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 40
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 401,
+      "title": "API Latency (requires dedicated log metric)",
+      "type": "timeseries",
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 41
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "avg_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\", trading_mode=\"$trading_mode\"} |= \"API latency\" | regexp \"API latency[:= ](?P<ms>[\\\\d.]+)\" | unwrap ms [1m])",
+          "legendFormat": "API Latency (ms)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "showPoints": "auto"
+          }
+        }
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 402,
+      "title": "Order Execution Time (requires dedicated log metric)",
+      "type": "timeseries",
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 41
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "avg_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\", trading_mode=\"$trading_mode\"} |= \"execution time\" | regexp \"execution time[:= ](?P<ms>[\\\\d.]+)\" | unwrap ms [1m])",
+          "legendFormat": "Execution Time (ms)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "showPoints": "auto"
+          }
+        }
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 403,
+      "title": "Failed Orders",
+      "type": "stat",
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 41
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\", trading_mode=\"$trading_mode\"} |= \"OrderManager\" |~ \"failed|ERROR|error\" [5m]))",
+          "legendFormat": "Failures/5m"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 404,
+      "title": "CPU and Memory Usage (Log-based)",
+      "type": "timeseries",
+      "datasource": "Loki",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 41
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "last_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\", trading_mode=\"$trading_mode\"} |= \"HealthCheck\" |= \"System resource usage\" | regexp \"'cpu': (?P<cpu>[\\\\d.]+)\" | unwrap cpu [$__auto])",
+          "legendFormat": "CPU %"
+        },
+        {
+          "refId": "B",
+          "expr": "last_over_time({job=\"grid_trading_bot\", trading_pair=\"$trading_pair\", trading_mode=\"$trading_mode\"} |= \"HealthCheck\" |= \"System resource usage\" | regexp \"'bot_memory_percent': (?P<mem>[\\\\d.]+)\" | unwrap mem [$__auto])",
+          "legendFormat": "Bot Memory %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "showPoints": "auto"
+          }
+        }
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
       }
     }
   ]

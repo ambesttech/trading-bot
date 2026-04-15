@@ -21,6 +21,7 @@ class TestGridManager:
         mock_config_manager.get_spacing_type.return_value = SpacingType.ARITHMETIC
         mock_config_manager.get_buy_ratio.return_value = 1.0
         mock_config_manager.get_sell_ratio.return_value = 1.0
+        mock_config_manager.get_max_portfolio_fraction_for_sizing.return_value = 1.0
         return mock_config_manager
 
     @pytest.fixture
@@ -95,12 +96,34 @@ class TestGridManager:
         current_fiat_balance = 5000  # Half of the total balance
         current_crypto_balance = 0.5
         current_price = 2000
-        expected_quantity = (
-            (current_fiat_balance + (current_crypto_balance * current_price)) / 2
-            - (current_crypto_balance * current_price)
-        ) / current_price
+        fraction = grid_manager.config_manager.get_max_portfolio_fraction_for_sizing.return_value
+        effective = (current_fiat_balance + (current_crypto_balance * current_price)) * fraction
+        expected_quantity = (effective / 2 - (current_crypto_balance * current_price)) / current_price
         result = grid_manager.get_initial_order_quantity(current_fiat_balance, current_crypto_balance, current_price)
         assert result == expected_quantity
+
+    def test_get_order_size_respects_max_portfolio_fraction(self, config_manager):
+        config_manager.get_max_portfolio_fraction_for_sizing.return_value = 0.5
+        grid_manager = GridManager(config_manager, StrategyType.SIMPLE_GRID)
+        grid_manager.initialize_grids_and_levels()
+        current_price = 2000
+        total_balance = 10000
+        full = total_balance / len(grid_manager.grid_levels) / current_price
+        result = grid_manager.get_order_size_for_grid_level(total_balance, current_price, OrderSide.BUY)
+        assert result == pytest.approx(full * 0.5)
+
+    def test_get_initial_order_quantity_respects_max_portfolio_fraction(self, config_manager):
+        config_manager.get_max_portfolio_fraction_for_sizing.return_value = 0.5
+        grid_manager = GridManager(config_manager, StrategyType.SIMPLE_GRID)
+        grid_manager.initialize_grids_and_levels()
+        current_fiat_balance = 5000
+        current_crypto_balance = 0.5
+        current_price = 2000
+        total = current_fiat_balance + current_crypto_balance * current_price
+        effective = total * 0.5
+        expected_quantity = (effective / 2 - current_crypto_balance * current_price) / current_price
+        result = grid_manager.get_initial_order_quantity(current_fiat_balance, current_crypto_balance, current_price)
+        assert result == pytest.approx(expected_quantity)
 
     def test_pair_grid_levels(self, grid_manager):
         source_grid_level = Mock(spec=GridLevel, price=1000)
