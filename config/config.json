@@ -2,7 +2,7 @@
   "exchange": {
     "name": "mexc",
     "trading_fee": 0.001,
-    "trading_mode": "paper_trading"
+    "trading_mode": "live"
   },
   "pair": {
     "base_currency": "SOL",
